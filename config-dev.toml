@@ -1,0 +1,3 @@
+database_url = "postgres://app:app@localhost:5432/appdb"
+page_size = 200
+schema = "public"

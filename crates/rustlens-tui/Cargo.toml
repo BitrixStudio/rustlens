@@ -1,0 +1,15 @@
+[package]
+name = "rustlens-tui"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1.37", features = ["rt-multi-thread", "macros", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+rustlens-core = { path = "../rustlens-core" }
