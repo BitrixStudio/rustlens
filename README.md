@@ -15,7 +15,7 @@ This workspace provides two commands:
 ### `rustlens`
 
 Direct database viewer. Connects to a database via connection string.
-<img width="1675" height="395" alt="image" src="https://github.com/user-attachments/assets/a6c4e901-b4e2-4a47-8b50-682e6c2cf21f" />
+<img width="799" height="368" alt="image" src="https://github.com/user-attachments/assets/57fc6b37-5658-495c-be81-88d7ad5f5f08" />
 
 ### `rustlensmanager`
 
