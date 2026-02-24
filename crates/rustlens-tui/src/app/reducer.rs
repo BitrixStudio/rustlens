@@ -110,12 +110,12 @@ async fn handle_input(
         SwitchTabBrowse => {
             s.tab = Tab::Browse;
             s.focus = Focus::Tables;
-            root.status.left = "Switched to Browse tab".into();
+            root.status.middle = "Switched to Browse tab".into();
         }
         SwitchTabSql => {
             s.tab = Tab::Sql;
             s.focus = Focus::SqlEditor;
-            root.status.left = "Switched to SQL tab".into();
+            root.status.middle = "Switched to SQL tab".into();
         }
 
         ToggleFocus => toggle_focus(s),
@@ -230,6 +230,9 @@ async fn handle_input(
                     let _ = db_cmd_tx.send(db::DbCmd::ExecuteSql { sql }).await;
                 }
             }
+        }
+        CycleTheme => {
+            root.cycle_theme();
         }
     }
 

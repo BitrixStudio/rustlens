@@ -1,27 +1,42 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::Modifier,
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, Tabs},
 };
 
 use crate::app::state::{Focus, Tab};
+use crate::ui::theme::Theme;
 
-pub fn top_bar(tab: Tab) -> Paragraph<'static> {
-    let tab_name = match tab {
-        Tab::Browse => "Browse",
-        Tab::Sql => "SQL",
+pub fn top_tabs(tab: Tab, theme: &Theme) -> Tabs<'static> {
+    let titles = vec![
+        Line::from(Span::styled(" [F2] Browse ", theme.tab_inactive)),
+        Line::from(Span::styled(" [F3] SQL ", theme.tab_inactive)),
+    ];
+
+    let selected = match tab {
+        Tab::Browse => 0,
+        Tab::Sql => 1,
     };
-    let help = "q quit  F2 Browse  F3 SQL  Tab focus  Enter open  PgUp/PgDn page  Ctrl+Enter run";
-    Paragraph::new(Line::from(vec![
-        Span::styled("rustlens", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(format!("  |  Tab: {}  |  {}", tab_name, help)),
-    ]))
+
+    Tabs::new(titles)
+        .select(selected)
+        .style(theme.bar)
+        .highlight_style(theme.tab_active)
 }
 
-pub fn bottom_bar_line(width: u16, left: &str, right: &str) -> Paragraph<'static> {
-    let w = width as usize;
+pub fn theme_button(theme: &Theme) -> Paragraph<'static> {
+    let label = "[Ctrl+T] Toggle Theme";
+    let line = Line::from(vec![Span::styled(
+        label,
+        theme.tab_active.add_modifier(Modifier::BOLD),
+    )]);
 
+    Paragraph::new(line).style(theme.bar)
+}
+
+pub fn bottom_bar(width: u16, left: &str, right: &str, theme: &Theme) -> Paragraph<'static> {
+    let w = width as usize;
     let left_len = left.chars().count();
     let right_len = right.chars().count();
 
@@ -31,8 +46,13 @@ pub fn bottom_bar_line(width: u16, left: &str, right: &str) -> Paragraph<'static
         " ".into()
     };
 
-    let line = format!("{left}{spacer}{right}");
-    Paragraph::new(line)
+    let line = Line::from(vec![
+        Span::styled(left.to_string(), theme.status_left),
+        Span::raw(spacer),
+        Span::styled(right.to_string(), theme.status_right),
+    ]);
+
+    Paragraph::new(line).style(theme.bar)
 }
 
 pub fn split_main(area: Rect) -> [Rect; 2] {
@@ -43,20 +63,39 @@ pub fn split_main(area: Rect) -> [Rect; 2] {
     [chunks[0], chunks[1]]
 }
 
-pub fn tables_list<'a>(tables: &'a [String], focus: Focus) -> List<'a> {
+fn block_with_border(title: String, focused: bool, theme: &Theme) -> Block<'static> {
+    let border_style = if focused {
+        theme.border_focused
+    } else {
+        theme.border_normal
+    };
+
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .title(Span::styled(
+            title,
+            if focused { theme.text } else { theme.muted },
+        ))
+}
+
+pub fn tables_list<'a>(tables: &'a [String], focus: Focus, theme: &Theme) -> List<'a> {
     let items: Vec<ListItem> = tables
         .iter()
-        .map(|t| ListItem::new(Line::from(t.as_str())))
+        .map(|t| ListItem::new(Line::from(Span::styled(t.as_str(), theme.list_item))))
         .collect();
 
-    let title = match focus {
-        Focus::Tables => "Tables (focus)",
-        _ => "Tables",
+    let focused = matches!(focus, Focus::Tables);
+    let title = if focused {
+        "Tables (focus)".to_string()
+    } else {
+        "Tables".to_string()
     };
 
     List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+        .block(block_with_border(title, focused, theme))
+        .style(theme.text)
+        .highlight_style(theme.list_item_selected)
 }
 
 pub fn results_table<'a>(
@@ -64,15 +103,21 @@ pub fn results_table<'a>(
     rows: &'a [Vec<String>],
     focus: Focus,
     title: String,
+    theme: &Theme,
 ) -> Table<'a> {
-    let title = match focus {
-        Focus::Results => format!("{} (focus)", title),
-        _ => title,
+    let focused = matches!(focus, Focus::Results);
+    let title = if focused {
+        format!("{} (focus)", title)
+    } else {
+        title
     };
 
-    let header =
-        Row::new(columns.iter().cloned()).style(Style::default().add_modifier(Modifier::BOLD));
-    let body: Vec<Row> = rows.iter().map(|r| Row::new(r.iter().cloned())).collect();
+    let header = Row::new(columns.iter().cloned()).style(theme.table_header);
+
+    let body: Vec<Row> = rows
+        .iter()
+        .map(|r| Row::new(r.iter().cloned()).style(theme.table_row))
+        .collect();
 
     let widths = if columns.is_empty() {
         vec![Constraint::Min(1)]
@@ -85,15 +130,20 @@ pub fn results_table<'a>(
 
     Table::new(body, widths)
         .header(header)
-        .block(Block::default().borders(Borders::ALL).title(title))
-        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+        .block(block_with_border(title, focused, theme))
+        .style(theme.text)
+        .row_highlight_style(theme.table_row_selected)
 }
 
-pub fn sql_editor<'a>(sql_text: &'a str, focus: Focus) -> Paragraph<'a> {
-    let title = match focus {
-        Focus::SqlEditor => "SQL Editor (focus)",
-        _ => "SQL Editor",
+pub fn sql_editor<'a>(sql_text: &'a str, focus: Focus, theme: &Theme) -> Paragraph<'a> {
+    let focused = matches!(focus, Focus::SqlEditor);
+    let title = if focused {
+        "SQL Editor (focus)".to_string()
+    } else {
+        "SQL Editor".to_string()
     };
 
-    Paragraph::new(sql_text).block(Block::default().borders(Borders::ALL).title(title))
+    Paragraph::new(sql_text)
+        .style(theme.editor_text)
+        .block(block_with_border(title, focused, theme))
 }

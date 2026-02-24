@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use tokio::time::{timeout, Duration};
 
 pub async fn connect(database_url: &str) -> Result<PgPool> {
     PgPoolOptions::new()

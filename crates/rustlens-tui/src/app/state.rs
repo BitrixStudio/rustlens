@@ -1,7 +1,7 @@
+use crate::ui::theme::{Theme, ThemeKind};
 use crate::{config::AppConfig, LaunchMode};
 use ratatui::widgets::{ListState, TableState};
 use std::time::Duration;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Browse,
@@ -25,6 +25,7 @@ pub enum Mode {
 pub struct StatusBar {
     pub left: String,
     pub right: String,
+    pub middle: String,
 }
 
 #[derive(Debug)]
@@ -32,6 +33,9 @@ pub struct RootState {
     pub mode: Mode,
     pub status: StatusBar,
     pub session: SessionState,
+
+    pub theme_kind: ThemeKind,
+    pub theme: Theme,
 }
 
 #[derive(Debug)]
@@ -64,14 +68,39 @@ impl RootState {
             LaunchMode::Viewer { .. } => Mode::Viewer,
             LaunchMode::Manager => Mode::Manager,
         };
-
+        let theme_kind = ThemeKind::Default;
         Self {
             mode,
             status: StatusBar {
                 left: "Starting…".into(),
                 right: String::new(),
+                middle: String::new(),
             },
             session: SessionState::new(cfg),
+            theme: Theme::from_kind(theme_kind),
+            theme_kind,
+        }
+    }
+    pub fn cycle_theme(&mut self) {
+        use crate::ui::theme::ThemeKind::*;
+
+        self.theme_kind = match self.theme_kind {
+            Default => SolarizedDark,
+            SolarizedDark => GruvboxDark,
+            GruvboxDark => Default,
+        };
+
+        self.theme = crate::ui::theme::Theme::from_kind(self.theme_kind);
+        self.status.middle = format!("Theme: {}", self.theme_kind.as_str());
+    }
+}
+
+impl ThemeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ThemeKind::Default => "Default",
+            ThemeKind::SolarizedDark => "Solarized Dark",
+            ThemeKind::GruvboxDark => "Gruvbox Dark",
         }
     }
 }

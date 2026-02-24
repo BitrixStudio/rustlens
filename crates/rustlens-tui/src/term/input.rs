@@ -11,6 +11,7 @@ pub enum UiEvent {
     SwitchTabBrowse,
     SwitchTabSql,
     ToggleFocus,
+    CycleTheme,
 
     Nav(NavDir),
     Page(PageDir),
@@ -38,6 +39,7 @@ pub fn poll_next_event(tick: Duration) -> Result<Option<UiEvent>> {
 
                 (KeyCode::F(2), _) => UiEvent::SwitchTabBrowse,
                 (KeyCode::F(3), _) => UiEvent::SwitchTabSql,
+                (KeyCode::Char('t'), KeyModifiers::CONTROL) => UiEvent::CycleTheme,
 
                 (KeyCode::Tab, _) => UiEvent::ToggleFocus,
 
