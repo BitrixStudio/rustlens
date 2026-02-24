@@ -4,7 +4,9 @@ use anyhow::anyhow;
 use sqlx::{Column, PgPool, Row as _};
 
 pub async fn load_tables(pool: &PgPool, schema: &str) -> Result<Vec<String>> {
-    if !schema_exists(pool, schema).await? {
+    let exists = schema_exists(pool, schema).await?;
+
+    if !exists {
         return Err(anyhow!(r#"schema "{}" does not exist"#, schema));
     }
     let rows = sqlx::query(

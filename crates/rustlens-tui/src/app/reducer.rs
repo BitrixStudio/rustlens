@@ -21,43 +21,62 @@ pub async fn reduce(
     }
 }
 
-async fn handle_db(
-    root: &mut RootState,
-    evt: db::DbEvt,
-    db_cmd_tx: &mpsc::Sender<db::DbCmd>,
-) {
+async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sender<db::DbCmd>) {
     match evt {
-        db::DbEvt::Status(msg) => root.status = msg,
+        db::DbEvt::Status(msg) => root.status.left = msg,
 
-        db::DbEvt::Error(e) => root.status = format!("Error: {e}"),
+        db::DbEvt::Error(e) => {
+            // #[cfg(debug_assertions)]
+            // eprintln!("[tui] DbEvt::Error: {}", e);
+            if looks_like_missing_schema(&e) && root.session.schema != "public" {
+                let bad = root.session.schema.clone();
+                // #[cfg(debug_assertions)]
+                // eprintln!("[tui] fallback schema '{}' -> 'public'", bad);
+                root.session.schema = "public".to_string();
 
+                root.status.left = format!("Schema '{bad}' not found. Using public schema.");
+
+                let schema = root.session.schema.clone();
+                let _ = db_cmd_tx.send(db::DbCmd::LoadTables { schema }).await;
+            } else {
+                root.status.left = format!("Error: {e}");
+            }
+        }
         db::DbEvt::TablesLoaded { tables } => {
             root.session.tables = tables;
             root.session.tables_state.select(Some(0));
 
             if root.session.tables.is_empty() {
-                root.status = format!("No tables found in schema '{}'.", root.session.schema);
+                root.status.right = format!("No tables found in schema '{}'.", root.session.schema);
             } else {
-                root.status = "Tables loaded. Enter to open.".into();
+                root.status.right = "Tables loaded. Enter to open.".into();
             }
         }
 
-        db::DbEvt::QueryResult { columns, rows, info } => {
+        db::DbEvt::QueryResult {
+            columns,
+            rows,
+            info,
+        } => {
             root.session.columns = columns;
             root.session.rows = rows;
             root.session.results_state.select(Some(0));
-            root.status = info;
+            root.status.right = info;
         }
 
         db::DbEvt::SqlExecuted { info } => {
             root.session.sql_last_result = Some(info.clone());
-            root.status = info;
+            root.status.right = info;
         }
     }
 
     // Auto-open first table once tables arrive.
     if root.session.selected_table.is_none() && !root.session.tables.is_empty() {
-        if let Some(t) = root.session.selected_table_from_list().map(|x| x.to_string()) {
+        if let Some(t) = root
+            .session
+            .selected_table_from_list()
+            .map(|x| x.to_string())
+        {
             root.session.selected_table = Some(t.clone());
             root.session.page = 0;
 
@@ -91,12 +110,12 @@ async fn handle_input(
         SwitchTabBrowse => {
             s.tab = Tab::Browse;
             s.focus = Focus::Tables;
-            root.status = "Browse".into();
+            root.status.left = "Switched to Browse tab".into();
         }
         SwitchTabSql => {
             s.tab = Tab::Sql;
             s.focus = Focus::SqlEditor;
-            root.status = "SQL".into();
+            root.status.left = "Switched to SQL tab".into();
         }
 
         ToggleFocus => toggle_focus(s),
@@ -206,7 +225,7 @@ async fn handle_input(
             if s.tab == Tab::Sql {
                 let sql = s.sql_text.trim().to_string();
                 if sql.is_empty() {
-                    root.status = "SQL is empty.".into();
+                    root.status.right = "SQL is empty.".into();
                 } else {
                     let _ = db_cmd_tx.send(db::DbCmd::ExecuteSql { sql }).await;
                 }
@@ -254,4 +273,11 @@ fn nav_table(state: &mut ratatui::widgets::TableState, len: usize, dir: NavDir) 
         NavDir::Down => (i + 1).min(len - 1),
     };
     state.select(Some(ni));
+}
+
+fn looks_like_missing_schema(err: &str) -> bool {
+    let e = err.to_ascii_lowercase();
+    // custom check for our explicit error
+    // should be handled better in the future, this is only for MVP
+    e.contains("schema") && e.contains("does not exist")
 }

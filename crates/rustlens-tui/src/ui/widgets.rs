@@ -19,8 +19,20 @@ pub fn top_bar(tab: Tab) -> Paragraph<'static> {
     ]))
 }
 
-pub fn bottom_bar<'a>(status: &'a str) -> Paragraph<'a> {
-    Paragraph::new(status).block(Block::default().borders(Borders::TOP))
+pub fn bottom_bar_line(width: u16, left: &str, right: &str) -> Paragraph<'static> {
+    let w = width as usize;
+
+    let left_len = left.chars().count();
+    let right_len = right.chars().count();
+
+    let spacer = if w > left_len + right_len + 1 {
+        " ".repeat(w - left_len - right_len)
+    } else {
+        " ".into()
+    };
+
+    let line = format!("{left}{spacer}{right}");
+    Paragraph::new(line)
 }
 
 pub fn split_main(area: Rect) -> [Rect; 2] {
