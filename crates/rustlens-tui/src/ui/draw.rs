@@ -2,6 +2,7 @@ use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::Frame;
 
 use crate::app::state::{Mode, RootState};
+use crate::ui::widgets::BottomBarMode;
 use crate::ui::{layout, widgets};
 
 pub fn draw(f: &mut Frame, root: &mut RootState) {
@@ -30,7 +31,9 @@ pub fn draw(f: &mut Frame, root: &mut RootState) {
         widgets::bottom_bar(
             rects.bottom.width,
             &root.status.left,
+            &root.status.middle,
             &root.status.right,
+            BottomBarMode::MiddleAndRightRightAligned,
             &theme,
         ),
         rects.bottom,

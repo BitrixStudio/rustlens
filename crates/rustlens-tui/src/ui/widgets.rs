@@ -1,12 +1,17 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Modifier,
+    style::{Color, Modifier},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, Tabs},
 };
 
 use crate::app::state::{Focus, Tab};
 use crate::ui::theme::Theme;
+
+pub enum BottomBarMode {
+    MiddleCentered,
+    MiddleAndRightRightAligned,
+}
 
 pub fn top_tabs(tab: Tab, theme: &Theme) -> Tabs<'static> {
     let titles = vec![
@@ -35,24 +40,107 @@ pub fn theme_button(theme: &Theme) -> Paragraph<'static> {
     Paragraph::new(line).style(theme.bar)
 }
 
-pub fn bottom_bar(width: u16, left: &str, right: &str, theme: &Theme) -> Paragraph<'static> {
+fn take_chars(s: &str, max: usize) -> String {
+    s.chars().take(max).collect()
+}
+
+pub fn bottom_bar(
+    width: u16,
+    left: &str,
+    middle: &str,
+    right: &str,
+    mode: BottomBarMode,
+    theme: &Theme,
+) -> Paragraph<'static> {
     let w = width as usize;
-    let left_len = left.chars().count();
-    let right_len = right.chars().count();
 
-    let spacer = if w > left_len + right_len + 1 {
-        " ".repeat(w - left_len - right_len)
-    } else {
-        " ".into()
-    };
+    // Early exit: nothing fits
+    if w == 0 {
+        return Paragraph::new(Line::from(Vec::<Span>::new())).style(theme.bar);
+    }
 
-    let line = Line::from(vec![
-        Span::styled(left.to_string(), theme.status_left),
-        Span::raw(spacer),
-        Span::styled(right.to_string(), theme.status_right),
-    ]);
+    let mut spans: Vec<Span> = Vec::new();
+    match mode {
+        // This whole section looks like a hack/workaround
+        // and should be thought out further after MVP phase
+        BottomBarMode::MiddleAndRightRightAligned => {
+            spans.push(Span::styled(left.to_string(), theme.status_left));
 
-    Paragraph::new(line).style(theme.bar)
+            let w = w;
+            let left_len = left.chars().count();
+
+            if left_len >= w {
+                return Paragraph::new(Line::from(spans)).style(theme.bar);
+            }
+
+            let remaining = w - left_len;
+
+            let middle_present = !middle.is_empty();
+            let mut middle_piece = if middle_present {
+                format!(" {} ", middle)
+            } else {
+                String::new()
+            };
+
+            let sep = if middle_present { " " } else { "" };
+            let mut right_piece = right.to_string();
+
+            // We will fit into remaining by truncating middle first, then right
+            loop {
+                let right_len = right_piece.chars().count();
+                let middle_len = middle_piece.chars().count();
+                let sep_len = sep.chars().count();
+
+                // We are aiming for: [spacer][middle][sep][right]
+                let group_len = middle_len + sep_len + right_len;
+
+                if group_len <= remaining {
+                    // spacer goes between left and group, pushing group to the right edge
+                    let spacer_len = remaining - group_len;
+                    spans.push(Span::raw(" ".repeat(spacer_len)));
+
+                    if middle_present && !middle_piece.is_empty() {
+                        spans.push(Span::styled(middle_piece.clone(), theme.status_middle));
+                        if !sep.is_empty() {
+                            spans.push(Span::raw(sep));
+                        }
+                    }
+
+                    spans.push(Span::styled(right_piece.clone(), theme.status_right));
+                    break;
+                }
+
+                // Too long -> truncate middle first
+                if middle_present && !middle_piece.is_empty() {
+                    // we need to leave room for sep + right
+                    let right_len = right_piece.chars().count();
+                    let sep_len = sep.chars().count();
+                    let max_for_middle = remaining.saturating_sub(sep_len + right_len);
+
+                    if max_for_middle >= 2 {
+                        // keep padding "  " around inner text
+                        let inner_max = max_for_middle - 2;
+                        let inner = take_chars(middle, inner_max);
+                        middle_piece = format!(" {} ", inner);
+                    } else {
+                        // not enough space even for padded middle -> drop it
+                        middle_piece.clear();
+                    }
+                    continue;
+                }
+
+                // No middle text, still too long -> truncate right
+                let right_max = remaining; // only right remains (sep is empty if no middle)
+                right_piece = take_chars(&right_piece, right_max);
+                // next loop will fit
+            }
+        }
+
+        BottomBarMode::MiddleCentered => {
+            spans.push(Span::styled(take_chars(left, w), theme.status_left));
+        }
+    }
+    Paragraph::new(Line::from(spans)).style(theme.bar)
 }
 
 pub fn split_main(area: Rect) -> [Rect; 2] {

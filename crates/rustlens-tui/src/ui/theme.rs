@@ -31,6 +31,7 @@ pub struct Theme {
 
     pub status_left: Style,
     pub status_right: Style,
+    pub status_middle: Style,
 }
 
 impl Theme {
@@ -63,7 +64,8 @@ impl Theme {
                 editor_cursor: Style::default().bg(Color::White).fg(Color::Black),
 
                 status_left: Style::default().fg(Color::White),
-                status_right: Style::default().fg(Color::Gray),
+                status_right: Style::default().bg(Color::Cyan).fg(Color::Black),
+                status_middle: Style::default().fg(Color::Gray),
             },
 
             ThemeKind::SolarizedDark => {
@@ -95,7 +97,8 @@ impl Theme {
                     editor_cursor: Style::default().bg(Color::Yellow).fg(Color::Black),
 
                     status_left: Style::default().fg(Color::Yellow),
-                    status_right: Style::default().fg(Color::DarkGray),
+                    status_right: Style::default().bg(Color::Yellow).fg(Color::Black),
+                    status_middle: Style::default().fg(Color::DarkGray),
                 }
             }
 
@@ -126,7 +129,8 @@ impl Theme {
                 editor_cursor: Style::default().bg(Color::LightRed).fg(Color::Black),
 
                 status_left: Style::default().fg(Color::LightRed),
-                status_right: Style::default().fg(Color::Gray),
+                status_right: Style::default().bg(Color::LightRed).fg(Color::Black),
+                status_middle: Style::default().fg(Color::Gray),
             },
         }
     }
