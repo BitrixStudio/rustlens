@@ -8,7 +8,10 @@ use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub enum LaunchMode {
-    Viewer { database_url: String },
+    Viewer {
+        database_url: String,
+        schema: String,
+    },
     Manager,
 }
 
@@ -17,11 +20,14 @@ pub enum LaunchMode {
 /// - Manager mode shows saved connections and opens viewer sessions.
 pub fn run(mode: LaunchMode) -> Result<()> {
     let cfg = match &mode {
-        LaunchMode::Viewer { database_url } => {
+        LaunchMode::Viewer {
+            database_url,
+            schema,
+        } => {
             // In direct viewer mode we don't require config.toml.
             config::AppConfig {
                 database_url: database_url.clone(),
-                schema: "public".to_string(),
+                schema: schema.clone(),
                 page_size: 200,
             }
         }
