@@ -1,3 +1,4 @@
+pub mod connect;
 pub mod postgres;
 pub mod protocol;
 pub mod worker;

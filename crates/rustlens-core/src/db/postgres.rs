@@ -1,8 +1,12 @@
 use crate::util::value_fmt::cell_to_string;
 use anyhow::Result;
+use anyhow::anyhow;
 use sqlx::{Column, PgPool, Row as _};
 
 pub async fn load_tables(pool: &PgPool, schema: &str) -> Result<Vec<String>> {
+    if !schema_exists(pool, schema).await? {
+        return Err(anyhow!(r#"schema "{}" does not exist"#, schema));
+    }
     let rows = sqlx::query(
         r#"
         select tablename
@@ -103,4 +107,20 @@ pub async fn execute_sql(pool: &PgPool, sql: &str) -> Result<SqlExecResult> {
             })
         }
     }
+}
+async fn schema_exists(pool: &PgPool, schema: &str) -> Result<bool> {
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM information_schema.schemata
+            WHERE schema_name = $1
+        )
+        "#,
+    )
+    .bind(schema)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(exists)
 }

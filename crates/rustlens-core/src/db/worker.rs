@@ -11,6 +11,7 @@ pub async fn run(
 ) -> Result<()> {
     // We don't use `?` here because we want to report the error
     // back to the UI instead of crashing the worker task.
+    let _ = evt_tx.send(DbEvt::Status("Connecting…".into())).await;
     let pool = match PgPoolOptions::new()
         .max_connections(6)
         .connect(&database_url)

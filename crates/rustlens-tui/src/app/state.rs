@@ -26,6 +26,7 @@ pub struct RootState {
     pub mode: Mode,
     pub status: String,
     pub session: SessionState,
+    pub toast: Option<(std::time::Instant, String)>,
 }
 
 #[derive(Debug)]
@@ -53,6 +54,22 @@ pub struct SessionState {
 }
 
 impl RootState {
+    pub fn toast(&mut self, msg: impl Into<String>) {
+        self.toast = Some((std::time::Instant::now(), msg.into()));
+    }
+
+    pub fn status_line(&mut self) -> String {
+        const TTL: std::time::Duration = std::time::Duration::from_secs(4);
+
+        if let Some((t, msg)) = &self.toast {
+            if t.elapsed() <= TTL {
+                return msg.clone();
+            }
+        }
+
+        self.toast = None;
+        self.status.clone()
+    }
     pub fn new(cfg: AppConfig, launch: LaunchMode) -> Self {
         let mode = match launch {
             LaunchMode::Viewer { .. } => Mode::Viewer,
@@ -63,6 +80,7 @@ impl RootState {
             mode,
             status: "Starting…".into(),
             session: SessionState::new(cfg),
+            toast: None,
         }
     }
 }

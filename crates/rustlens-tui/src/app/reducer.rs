@@ -21,47 +21,55 @@ pub async fn reduce(
     }
 }
 
-async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sender<db::DbCmd>) {
-    let s = &mut root.session;
-
+async fn handle_db(
+    root: &mut RootState,
+    evt: db::DbEvt,
+    db_cmd_tx: &mpsc::Sender<db::DbCmd>,
+) {
     match evt {
         db::DbEvt::Status(msg) => root.status = msg,
+
         db::DbEvt::Error(e) => root.status = format!("Error: {e}"),
 
         db::DbEvt::TablesLoaded { tables } => {
-            s.tables = tables;
-            s.tables_state.select(Some(0));
-            root.status = "Tables loaded. Enter to open.".into();
+            root.session.tables = tables;
+            root.session.tables_state.select(Some(0));
+
+            if root.session.tables.is_empty() {
+                root.status = format!("No tables found in schema '{}'.", root.session.schema);
+            } else {
+                root.status = "Tables loaded. Enter to open.".into();
+            }
         }
 
-        db::DbEvt::QueryResult {
-            columns,
-            rows,
-            info,
-        } => {
-            s.columns = columns;
-            s.rows = rows;
-            s.results_state.select(Some(0));
+        db::DbEvt::QueryResult { columns, rows, info } => {
+            root.session.columns = columns;
+            root.session.rows = rows;
+            root.session.results_state.select(Some(0));
             root.status = info;
         }
 
         db::DbEvt::SqlExecuted { info } => {
-            s.sql_last_result = Some(info.clone());
+            root.session.sql_last_result = Some(info.clone());
             root.status = info;
         }
     }
 
-    // Auto-open first table once tables arrive (nice default for viewer mode).
-    if s.selected_table.is_none() && !s.tables.is_empty() {
-        if let Some(t) = s.selected_table_from_list().map(|x| x.to_string()) {
-            s.selected_table = Some(t.clone());
-            s.page = 0;
+    // Auto-open first table once tables arrive.
+    if root.session.selected_table.is_none() && !root.session.tables.is_empty() {
+        if let Some(t) = root.session.selected_table_from_list().map(|x| x.to_string()) {
+            root.session.selected_table = Some(t.clone());
+            root.session.page = 0;
+
+            let schema = root.session.schema.clone();
+            let page_size = root.session.page_size;
+
             let _ = db_cmd_tx
                 .send(db::DbCmd::LoadTablePage {
-                    schema: s.schema.clone(),
+                    schema,
                     table: t,
                     page: 0,
-                    page_size: s.page_size,
+                    page_size,
                 })
                 .await;
         }

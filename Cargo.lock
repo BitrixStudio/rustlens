@@ -1339,7 +1339,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "rustlens-core",
  "rustlens-tui",
+ "tokio",
 ]
 
 [[package]]

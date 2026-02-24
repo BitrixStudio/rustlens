@@ -14,5 +14,6 @@ pub fn draw(f: &mut Frame, root: &mut RootState) {
         Mode::Manager => crate::ui::screens::manager::draw(f, root, rects.main),
     }
 
-    f.render_widget(widgets::bottom_bar(&root.status), rects.bottom);
+    let msg = root.status_line();
+    f.render_widget(widgets::bottom_bar(&msg), rects.bottom);
 }

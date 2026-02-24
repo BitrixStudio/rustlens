@@ -10,7 +10,7 @@ use anyhow::Result;
 pub enum LaunchMode {
     Viewer {
         database_url: String,
-        schema: String,
+        schema: Option<String>,
     },
     Manager,
 }
@@ -27,7 +27,7 @@ pub fn run(mode: LaunchMode) -> Result<()> {
             // In direct viewer mode we don't require config.toml.
             config::AppConfig {
                 database_url: database_url.clone(),
-                schema: schema.clone(),
+                schema: schema.clone().unwrap_or_else(|| "public".to_string()),
                 page_size: 200,
             }
         }
