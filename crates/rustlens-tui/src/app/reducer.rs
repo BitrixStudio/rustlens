@@ -5,6 +5,7 @@ use rustlens_core::db;
 use crate::app::actions::{NavDir, PageDir};
 use crate::app::event::AppEvent;
 use crate::app::sql::complete;
+use crate::app::state::Mode;
 use crate::app::state::{Focus, RootState, Tab};
 use crate::term::input::UiEvent;
 
@@ -69,6 +70,23 @@ async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sende
             root.session.sql_last_result = Some(info.clone());
             root.status.right = info;
         }
+        db::DbEvt::SqlMetaLoaded {
+            schema,
+            tables,
+            columns,
+        } => {
+            root.session.schema = schema; // keep TUI in sync if we ever change schema via meta command
+            root.session.sql_tables = tables.clone();
+            root.session.tables = tables;
+            root.session.tables_state.select(Some(0));
+
+            root.session.sql_columns.clear();
+            for (t, cols) in columns {
+                root.session.sql_columns.insert(t, cols);
+            }
+
+            root.status.left = format!("Schema: {}", root.session.schema);
+        }
     }
 
     // Auto-open first table once tables arrive.
@@ -102,7 +120,9 @@ async fn handle_input(
     db_cmd_tx: &mpsc::Sender<db::DbCmd>,
 ) -> bool {
     use UiEvent::*;
-
+    if root.mode == Mode::Manager {
+        return handle_manager_input(root, ev, db_cmd_tx).await;
+    }
     let s = &mut root.session;
 
     match ev {
@@ -343,4 +363,54 @@ fn looks_like_missing_schema(err: &str) -> bool {
     // custom check for our explicit error
     // should be handled better in the future, this is only for MVP
     e.contains("schema") && e.contains("does not exist")
+}
+
+async fn handle_manager_input(
+    root: &mut RootState,
+    ev: UiEvent,
+    db_cmd_tx: &mpsc::Sender<db::DbCmd>,
+) -> bool {
+    use UiEvent::*;
+
+    match ev {
+        Quit => return true,
+
+        Nav(dir) => {
+            let len = root.manager.profiles.len();
+            nav_list(&mut root.manager.list_state, len, dir);
+        }
+
+        OpenSelection => {
+            if let Some(p) = root.manager.selected().cloned() {
+                root.session.schema = p.schema.clone();
+                root.status.left = format!("Connecting to {}", p.name);
+
+                let _ = db_cmd_tx
+                    .send(db::DbCmd::Connect {
+                        database_url: p.database_url,
+                    })
+                    .await;
+
+                let _ = db_cmd_tx
+                    .send(db::DbCmd::LoadSqlMeta {
+                        schema: root.session.schema.clone(),
+                    })
+                    .await;
+
+                root.mode = Mode::Viewer;
+                root.session.tab = Tab::Browse;
+                root.session.focus = Focus::Tables;
+            }
+        }
+
+        CycleTheme => root.cycle_theme(),
+
+        SwitchTabBrowse | SwitchTabSql | ToggleFocus | Page(_) | ExecuteSql | SqlInput(_)
+        | SqlBackspace | SqlNewline | SqlMoveCursorLeft | SqlMoveCursorRight | ToggleCompletion
+        | CompletionNext | CompletionPrev | AcceptCompletion | Refresh => {
+            // ignore in manager for now
+        }
+    }
+
+    false
 }

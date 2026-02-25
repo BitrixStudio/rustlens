@@ -2,7 +2,39 @@ use crate::ui::syntax::SqlSyntax;
 use crate::ui::theme::{Theme, ThemeKind};
 use crate::{config::AppConfig, LaunchMode};
 use ratatui::widgets::{ListState, TableState};
+use std::collections::HashMap;
 use std::time::Duration;
+
+#[derive(Debug, Clone)]
+pub struct DbProfile {
+    pub name: String,
+    pub database_url: String,
+    pub schema: String,
+}
+
+#[derive(Debug)]
+pub struct ManagerState {
+    pub profiles: Vec<DbProfile>,
+    pub list_state: ListState,
+}
+
+impl ManagerState {
+    pub fn new() -> Self {
+        let mut list_state = ListState::default();
+        list_state.select(Some(0));
+        Self {
+            profiles: Vec::new(),
+            list_state,
+        }
+    }
+
+    pub fn selected(&self) -> Option<&DbProfile> {
+        self.list_state
+            .selected()
+            .and_then(|i| self.profiles.get(i))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Browse,
@@ -38,11 +70,12 @@ pub struct RootState {
 
     pub theme_kind: ThemeKind,
     pub theme: Theme,
+    pub manager: ManagerState,
 }
 
 #[derive(Clone, Debug)]
 pub struct CompletionState {
-    pub items: Vec<&'static str>,
+    pub items: Vec<String>,
     pub selected: usize,
     pub visible: bool,
     pub prefix_start: usize,
@@ -83,6 +116,9 @@ pub struct SessionState {
     pub sql_text: String,
     pub sql_cursor: usize,
     pub sql_last_result: Option<String>,
+
+    pub sql_tables: Vec<String>,
+    pub sql_columns: HashMap<String, Vec<String>>,
 }
 
 impl RootState {
@@ -92,6 +128,18 @@ impl RootState {
             LaunchMode::Manager => Mode::Manager,
         };
         let theme_kind = ThemeKind::Default;
+        let mut m = ManagerState::new();
+        m.profiles.push(DbProfile {
+            name: "local".into(),
+            database_url: "postgres://app:app@localhost:5432/appdb".into(),
+            schema: "public".into(),
+        });
+        m.profiles.push(DbProfile {
+            name: "dev".into(),
+            database_url: "postgres://app:app@dev-server:5432/appdb".into(),
+            schema: "public".into(),
+        });
+
         Self {
             mode,
             status: StatusBar {
@@ -103,6 +151,7 @@ impl RootState {
             theme: Theme::from_kind(theme_kind),
             theme_kind,
             sql_syntax: crate::ui::syntax::SqlSyntax::new(),
+            manager: m,
         }
     }
     pub fn cycle_theme(&mut self) {
@@ -157,6 +206,9 @@ impl SessionState {
             sql_text: String::new(),
             sql_cursor: 0,
             sql_last_result: None,
+
+            sql_tables: Vec::new(),
+            sql_columns: HashMap::new(),
         }
     }
 

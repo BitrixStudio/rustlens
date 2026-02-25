@@ -5,8 +5,7 @@ use crate::{config::AppConfig, LaunchMode};
 use rustlens_core::db;
 
 pub fn run_app(cfg: AppConfig, mode: LaunchMode) -> Result<()> {
-    // We need a tokio runtime because rustlens_tui::run is sync (called from bin main()).
-    // Keep it explicit so the binaries stay tiny.
+    // TODO: review possible enhancements on tui run
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -17,21 +16,17 @@ pub fn run_app(cfg: AppConfig, mode: LaunchMode) -> Result<()> {
         let (db_cmd_tx, db_cmd_rx) = mpsc::channel::<db::DbCmd>(64);
         let (db_evt_tx, mut db_evt_rx) = mpsc::channel::<db::DbEvt>(256);
 
-        let cfg_for_worker = cfg.clone();
         tokio::spawn(async move {
-            if let Err(e) = db::worker::run(cfg_for_worker.database_url, db_cmd_rx, db_evt_tx).await
-            {
+            if let Err(e) = db::worker::run(db_cmd_rx, db_evt_tx).await {
                 eprintln!("db worker crashed: {e:#}");
             }
         });
-
         let mut root = crate::app::state::RootState::new(cfg.clone(), mode);
 
-        // In viewer mode, start immediately by loading tables.
-        // In manager mode, you’ll load profiles from storage later; for now it can also load tables.
+        // In viewer mode, start immediately by loading tables
         db_cmd_tx
-            .send(db::DbCmd::LoadTables {
-                schema: cfg.schema.clone(),
+            .send(db::DbCmd::LoadSqlMeta {
+                schema: root.session.schema.clone(),
             })
             .await
             .ok();

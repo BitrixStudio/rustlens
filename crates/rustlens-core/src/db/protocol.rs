@@ -1,5 +1,8 @@
 #[derive(Debug)]
 pub enum DbCmd {
+    Connect {
+        database_url: String,
+    },
     LoadTables {
         schema: String,
     },
@@ -11,6 +14,9 @@ pub enum DbCmd {
     },
     ExecuteSql {
         sql: String,
+    },
+    LoadSqlMeta {
+        schema: String,
     },
 }
 
@@ -31,5 +37,11 @@ pub enum DbEvt {
 
     SqlExecuted {
         info: String,
+    },
+
+    SqlMetaLoaded {
+        schema: String,
+        tables: Vec<String>,
+        columns: Vec<(String, Vec<String>)>,
     },
 }

@@ -1,6 +1,6 @@
 use crate::util::value_fmt::cell_to_string;
-use anyhow::Result;
 use anyhow::anyhow;
+use anyhow::Result;
 use sqlx::{Column, PgPool, Row as _};
 
 pub async fn load_tables(pool: &PgPool, schema: &str) -> Result<Vec<String>> {
@@ -29,6 +29,35 @@ pub async fn load_tables(pool: &PgPool, schema: &str) -> Result<Vec<String>> {
 
 fn quote_ident(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
+}
+
+pub async fn load_columns(pool: &PgPool, schema: &str) -> Result<Vec<(String, Vec<String>)>> {
+    let rows = sqlx::query(
+        r#"
+        select table_name, column_name
+        from information_schema.columns
+        where table_schema = $1
+        order by table_name, ordinal_position
+        "#,
+    )
+    .bind(schema)
+    .fetch_all(pool)
+    .await?;
+
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+
+    for r in rows {
+        let t: String = r.get("table_name");
+        let c: String = r.get("column_name");
+
+        if out.last().map(|(tt, _)| tt.as_str()) == Some(t.as_str()) {
+            out.last_mut().unwrap().1.push(c);
+        } else {
+            out.push((t, vec![c]));
+        }
+    }
+
+    Ok(out)
 }
 
 pub async fn load_table_page(

@@ -57,7 +57,8 @@ pub fn draw(f: &mut Frame, root: &mut RootState, area: Rect, theme: &Theme) {
                     .items
                     .iter()
                     .take(visible_items)
-                    .map(|k| ratatui::widgets::ListItem::new(*k))
+                    // TODO: Investigate whether cloning is actually needed here or borrowing is safe
+                    .map(|k| ratatui::widgets::ListItem::new(k.clone()))
                     .collect();
 
                 let mut state = ratatui::widgets::ListState::default();
