@@ -7,6 +7,8 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0"
 tokio = { version = "1.37", features = ["rt-multi-thread", "macros"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "tls-native-tls"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "tls-native-tls", "uuid", "json", "chrono"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 uuid = { version = "1.8", features = ["v4", "serde"] }
