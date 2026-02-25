@@ -4,6 +4,7 @@ use rustlens_core::db;
 
 use crate::app::actions::{NavDir, PageDir};
 use crate::app::event::AppEvent;
+use crate::app::sql::complete;
 use crate::app::state::{Focus, RootState, Tab};
 use crate::term::input::UiEvent;
 
@@ -164,6 +165,12 @@ async fn handle_input(
                         })
                         .await;
                 }
+            }
+            if s.tab == Tab::Sql && s.focus == Focus::SqlEditor {
+                if s.completion_enabled && s.completion.visible {
+                    crate::app::sql::complete::accept_completion(s);
+                    return false;
+                }
             } else {
                 // Enter in SQL editor inserts newline. Use F5/Ctrl+R to execute.
                 s.sql_text.insert(s.sql_cursor, '\n');
@@ -184,6 +191,11 @@ async fn handle_input(
                 s.sql_text.insert(s.sql_cursor, ch);
                 s.sql_cursor += ch.len_utf8();
             }
+            if s.completion_enabled {
+                crate::app::sql::complete::refresh_completion(s);
+            } else {
+                s.completion.visible = false;
+            }
         }
         SqlBackspace => {
             if s.focus == Focus::SqlEditor && s.sql_cursor > 0 {
@@ -194,6 +206,11 @@ async fn handle_input(
                     .unwrap_or(0);
                 s.sql_text.drain(prev..s.sql_cursor);
                 s.sql_cursor = prev;
+            }
+            if s.completion_enabled {
+                crate::app::sql::complete::refresh_completion(s);
+            } else {
+                s.completion.visible = false;
             }
         }
         SqlNewline => {
@@ -211,6 +228,11 @@ async fn handle_input(
                     .unwrap_or(0);
                 s.sql_cursor = prev;
             }
+            if s.completion_enabled {
+                crate::app::sql::complete::refresh_completion(s);
+            } else {
+                s.completion.visible = false;
+            }
         }
         SqlMoveCursorRight => {
             if s.focus == Focus::SqlEditor && s.sql_cursor < s.sql_text.len() {
@@ -218,6 +240,11 @@ async fn handle_input(
                 if let Some((i, ch)) = it.next() {
                     s.sql_cursor += i + ch.len_utf8();
                 }
+            }
+            if s.completion_enabled {
+                crate::app::sql::complete::refresh_completion(s);
+            } else {
+                s.completion.visible = false;
             }
         }
 
@@ -231,8 +258,41 @@ async fn handle_input(
                 }
             }
         }
+
         CycleTheme => {
             root.cycle_theme();
+        }
+
+        ToggleCompletion => {
+            s.completion_enabled = !s.completion_enabled;
+            if !s.completion_enabled {
+                s.completion.visible = false;
+                s.completion.items.clear();
+            }
+            root.status.middle = if s.completion_enabled {
+                "Completion: ON".into()
+            } else {
+                "Completion: OFF".into()
+            };
+        }
+
+        CompletionNext => {
+            if s.completion.visible && !s.completion.items.is_empty() {
+                s.completion.selected =
+                    (s.completion.selected + 1).min(s.completion.items.len() - 1);
+            }
+        }
+
+        CompletionPrev => {
+            if s.completion.visible && !s.completion.items.is_empty() {
+                s.completion.selected = s.completion.selected.saturating_sub(1);
+            }
+        }
+
+        AcceptCompletion => {
+            if s.focus == Focus::SqlEditor {
+                complete::accept_completion(s);
+            }
         }
     }
 

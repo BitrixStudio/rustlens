@@ -1,3 +1,4 @@
+use crate::ui::syntax::SqlSyntax;
 use crate::ui::theme::{Theme, ThemeKind};
 use crate::{config::AppConfig, LaunchMode};
 use ratatui::widgets::{ListState, TableState};
@@ -33,9 +34,29 @@ pub struct RootState {
     pub mode: Mode,
     pub status: StatusBar,
     pub session: SessionState,
+    pub sql_syntax: SqlSyntax,
 
     pub theme_kind: ThemeKind,
     pub theme: Theme,
+}
+
+#[derive(Clone, Debug)]
+pub struct CompletionState {
+    pub items: Vec<&'static str>,
+    pub selected: usize,
+    pub visible: bool,
+    pub prefix_start: usize,
+}
+
+impl Default for CompletionState {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            selected: 0,
+            visible: false,
+            prefix_start: 0,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -56,6 +77,8 @@ pub struct SessionState {
     pub columns: Vec<String>,
     pub rows: Vec<Vec<String>>,
     pub results_state: TableState,
+    pub completion: CompletionState,
+    pub completion_enabled: bool,
 
     pub sql_text: String,
     pub sql_cursor: usize,
@@ -79,6 +102,7 @@ impl RootState {
             session: SessionState::new(cfg),
             theme: Theme::from_kind(theme_kind),
             theme_kind,
+            sql_syntax: crate::ui::syntax::SqlSyntax::new(),
         }
     }
     pub fn cycle_theme(&mut self) {
@@ -128,7 +152,8 @@ impl SessionState {
             columns: vec![],
             rows: vec![],
             results_state,
-
+            completion: CompletionState::default(),
+            completion_enabled: true,
             sql_text: String::new(),
             sql_cursor: 0,
             sql_last_result: None,

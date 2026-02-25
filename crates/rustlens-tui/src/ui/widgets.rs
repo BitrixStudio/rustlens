@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier},
-    text::{Line, Span},
+    style::Modifier,
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph, Row, Table, Tabs},
 };
 
@@ -151,7 +151,7 @@ pub fn split_main(area: Rect) -> [Rect; 2] {
     [chunks[0], chunks[1]]
 }
 
-fn block_with_border(title: String, focused: bool, theme: &Theme) -> Block<'static> {
+pub fn block_with_border(title: Line<'static>, focused: bool, theme: &Theme) -> Block<'static> {
     let border_style = if focused {
         theme.border_focused
     } else {
@@ -161,10 +161,18 @@ fn block_with_border(title: String, focused: bool, theme: &Theme) -> Block<'stat
     Block::default()
         .borders(Borders::ALL)
         .border_style(border_style)
-        .title(Span::styled(
-            title,
-            if focused { theme.text } else { theme.muted },
-        ))
+        .title(title)
+        .style(theme.text)
+}
+
+fn title_pill(title: &str, focused: bool, theme: &Theme) -> Line<'static> {
+    let style = if focused {
+        theme.tab_active
+    } else {
+        theme.tab_inactive
+    };
+
+    Line::from(vec![Span::styled(format!(" {title} "), style)])
 }
 
 pub fn tables_list<'a>(tables: &'a [String], focus: Focus, theme: &Theme) -> List<'a> {
@@ -174,16 +182,13 @@ pub fn tables_list<'a>(tables: &'a [String], focus: Focus, theme: &Theme) -> Lis
         .collect();
 
     let focused = matches!(focus, Focus::Tables);
-    let title = if focused {
-        "Tables (focus)".to_string()
-    } else {
-        "Tables".to_string()
-    };
+    let title = title_pill("Tables", focused, theme);
 
     List::new(items)
         .block(block_with_border(title, focused, theme))
         .style(theme.text)
         .highlight_style(theme.list_item_selected)
+        .highlight_symbol("▶ ")
 }
 
 pub fn results_table<'a>(
@@ -194,11 +199,7 @@ pub fn results_table<'a>(
     theme: &Theme,
 ) -> Table<'a> {
     let focused = matches!(focus, Focus::Results);
-    let title = if focused {
-        format!("{} (focus)", title)
-    } else {
-        title
-    };
+    let title = title_pill(&title, focused, theme);
 
     let header = Row::new(columns.iter().cloned()).style(theme.table_header);
 
@@ -223,15 +224,13 @@ pub fn results_table<'a>(
         .row_highlight_style(theme.table_row_selected)
 }
 
-pub fn sql_editor<'a>(sql_text: &'a str, focus: Focus, theme: &Theme) -> Paragraph<'a> {
+pub fn sql_editor(
+    highlighted: &[Line<'static>],
+    focus: Focus,
+    theme: &Theme,
+) -> Paragraph<'static> {
     let focused = matches!(focus, Focus::SqlEditor);
-    let title = if focused {
-        "SQL Editor (focus)".to_string()
-    } else {
-        "SQL Editor".to_string()
-    };
+    let title = title_pill("SQL", focused, theme);
 
-    Paragraph::new(sql_text)
-        .style(theme.editor_text)
-        .block(block_with_border(title, focused, theme))
+    Paragraph::new(Text::from(highlighted.to_vec())).block(block_with_border(title, focused, theme))
 }

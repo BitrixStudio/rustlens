@@ -25,6 +25,10 @@ pub enum UiEvent {
     SqlMoveCursorLeft,
     SqlMoveCursorRight,
     ExecuteSql,
+    ToggleCompletion,
+    CompletionNext,
+    CompletionPrev,
+    AcceptCompletion,
 }
 
 pub fn poll_next_event(tick: Duration) -> Result<Option<UiEvent>> {
@@ -43,9 +47,6 @@ pub fn poll_next_event(tick: Duration) -> Result<Option<UiEvent>> {
 
                 (KeyCode::Tab, _) => UiEvent::ToggleFocus,
 
-                (KeyCode::Up, _) | (KeyCode::Char('k'), _) => UiEvent::Nav(NavDir::Up),
-                (KeyCode::Down, _) | (KeyCode::Char('j'), _) => UiEvent::Nav(NavDir::Down),
-
                 (KeyCode::PageUp, _) => UiEvent::Page(PageDir::Prev),
                 (KeyCode::PageDown, _) => UiEvent::Page(PageDir::Next),
 
@@ -61,6 +62,13 @@ pub fn poll_next_event(tick: Duration) -> Result<Option<UiEvent>> {
                 (KeyCode::Right, _) => UiEvent::SqlMoveCursorRight,
                 (KeyCode::Char(c), m) if !m.contains(KeyModifiers::CONTROL) => UiEvent::SqlInput(c),
                 (KeyCode::Enter, _) => UiEvent::SqlNewline,
+                (KeyCode::Char(' '), KeyModifiers::CONTROL) => UiEvent::ToggleCompletion,
+                (KeyCode::Char('y'), KeyModifiers::CONTROL) => UiEvent::AcceptCompletion,
+                (KeyCode::Up, KeyModifiers::CONTROL) => UiEvent::CompletionPrev,
+                (KeyCode::Down, KeyModifiers::CONTROL) => UiEvent::CompletionNext,
+
+                (KeyCode::Up, _) | (KeyCode::Char('k'), _) => UiEvent::Nav(NavDir::Up),
+                (KeyCode::Down, _) | (KeyCode::Char('j'), _) => UiEvent::Nav(NavDir::Down),
 
                 _ => return Ok(None),
             };
