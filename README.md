@@ -21,7 +21,20 @@ Direct database viewer. Connects to a database via connection string.
 
 Connection manager. Intended to manage saved database profiles and launch viewer sessions.
 
-*(Manager functionality is currently minimal and will evolve.)*
+Profiles are loaded from the user's config directory. Manager add/edit/delete UI is still planned.
+
+### `rustlens-gui`
+
+Native Rust GUI viewer built with `egui`/`eframe`.
+
+Current GUI functionality:
+
+- Load profiles from the user's config directory
+- Connect to Postgres profiles
+- Browse tables with server-side pagination
+- Execute SQL from a multiline editor
+- Confirm potentially destructive SQL before execution
+- Render result sets in a resizable grid
 
 ---
 
@@ -52,11 +65,20 @@ This will:
 
 ---
 
-### Run using a config file
+### Run the profile manager
 
-Place a `config.toml` file in the workspace root:
+Create a profile file in the user config directory:
+
+- Linux: `~/.config/rustlens/profiles.toml`
+- macOS: `~/Library/Application Support/rustlens/profiles.toml`
+- Windows: `%APPDATA%\rustlens\profiles.toml`
+
+Example:
 
 ```toml
+[[profiles]]
+name = "local"
+driver = "postgres"
 database_url = "postgres://app:app@localhost:5432/appdb"
 schema = "public"
 page_size = 200
@@ -68,10 +90,15 @@ Then run:
 cargo run -p rustlensmanager
 ```
 
-Manager mode uses the config file.
+### Run the GUI viewer
 
-You may also create a `config-dev.toml` for local development.  
-In debug builds, if `config-dev.toml` exists, it will be preferred over `config.toml`.
+```bash
+cargo run --bin rustlens-gui
+```
+
+The GUI uses the same profile file as `rustlensmanager`.
+
+Profile URLs are stored in plaintext for now. Avoid putting production credentials in profile TOML until keyring support is implemented.
 
 ---
 
@@ -104,8 +131,9 @@ In debug builds, if `config-dev.toml` exists, it will be preferred over `config.
 | Key             | Action          |
 |----------------|-----------------|
 | Type            | Edit SQL        |
-| `Ctrl+F5` / `Ctrl+Enter` | Execute SQL     |
+| `F5` / `Ctrl+Enter` | Execute SQL     |
 | `Enter`         | Insert newline  |
+| `y` / `N`       | Confirm/cancel potentially destructive SQL |
 
 ---
 
@@ -117,10 +145,12 @@ This is a Cargo workspace:
 crates/
   rustlens-core/   # DB logic and shared models
   rustlens-tui/    # Terminal UI and app logic
+  rustlens-gui/    # Native egui viewer
 
 apps/
   rustlens/        # Viewer binary
   rustlensmanager/ # Manager binary
+  rustlens-gui/    # GUI binary
 ```
 
 - `rustlens-core` contains database worker and Postgres logic.

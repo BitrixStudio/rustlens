@@ -56,3 +56,9 @@ impl SqlSyntax {
         &self.cached
     }
 }
+
+impl Default for SqlSyntax {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -10,6 +10,7 @@ pub struct DbProfile {
     pub name: String,
     pub database_url: String,
     pub schema: String,
+    pub page_size: i64,
 }
 
 #[derive(Debug)]
@@ -23,7 +24,7 @@ impl ManagerState {
         let mut list_state = ListState::default();
         list_state.select(Some(0));
         Self {
-            profiles: Vec::new(),
+            profiles: crate::storage::profiles::load_profiles().unwrap_or_default(),
             list_state,
         }
     }
@@ -32,6 +33,12 @@ impl ManagerState {
         self.list_state
             .selected()
             .and_then(|i| self.profiles.get(i))
+    }
+}
+
+impl Default for ManagerState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -73,23 +80,12 @@ pub struct RootState {
     pub manager: ManagerState,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CompletionState {
     pub items: Vec<String>,
     pub selected: usize,
     pub visible: bool,
     pub prefix_start: usize,
-}
-
-impl Default for CompletionState {
-    fn default() -> Self {
-        Self {
-            items: Vec::new(),
-            selected: 0,
-            visible: false,
-            prefix_start: 0,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -116,6 +112,7 @@ pub struct SessionState {
     pub sql_text: String,
     pub sql_cursor: usize,
     pub sql_last_result: Option<String>,
+    pub pending_sql_confirmation: Option<String>,
 
     pub sql_tables: Vec<String>,
     pub sql_columns: HashMap<String, Vec<String>>,
@@ -128,17 +125,7 @@ impl RootState {
             LaunchMode::Manager => Mode::Manager,
         };
         let theme_kind = ThemeKind::Default;
-        let mut m = ManagerState::new();
-        m.profiles.push(DbProfile {
-            name: "local".into(),
-            database_url: "postgres://app:app@localhost:5432/appdb".into(),
-            schema: "public".into(),
-        });
-        m.profiles.push(DbProfile {
-            name: "dev".into(),
-            database_url: "postgres://app:app@dev-server:5432/appdb".into(),
-            schema: "public".into(),
-        });
+        let m = ManagerState::new();
 
         Self {
             mode,
@@ -206,6 +193,7 @@ impl SessionState {
             sql_text: String::new(),
             sql_cursor: 0,
             sql_last_result: None,
+            pending_sql_confirmation: None,
 
             sql_tables: Vec::new(),
             sql_columns: HashMap::new(),

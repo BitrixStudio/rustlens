@@ -3,6 +3,8 @@ resolver = "2"
 members = [
   "crates/rustlens-core",
   "crates/rustlens-tui",
+  "crates/rustlens-gui",
   "apps/rustlens",
   "apps/rustlensmanager",
+  "apps/rustlens-gui",
 ]

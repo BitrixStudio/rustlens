@@ -12,8 +12,18 @@ pub fn split_root(area: Rect) -> RootLayout {
     if area.height < 3 {
         return RootLayout {
             top: area,
-            main: Rect { x: area.x, y: area.y, width: area.width, height: 0 },
-            bottom: Rect { x: area.x, y: area.y, width: area.width, height: 0 },
+            main: Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: 0,
+            },
+            bottom: Rect {
+                x: area.x,
+                y: area.y,
+                width: area.width,
+                height: 0,
+            },
         };
     }
 

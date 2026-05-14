@@ -21,15 +21,19 @@ pub fn run_app(cfg: AppConfig, mode: LaunchMode) -> Result<()> {
                 eprintln!("db worker crashed: {e:#}");
             }
         });
+        let startup_database_url = match &mode {
+            LaunchMode::Viewer { database_url, .. } => Some(database_url.clone()),
+            LaunchMode::Manager => None,
+        };
+
         let mut root = crate::app::state::RootState::new(cfg.clone(), mode);
 
-        // In viewer mode, start immediately by loading tables
-        db_cmd_tx
-            .send(db::DbCmd::LoadSqlMeta {
-                schema: root.session.schema.clone(),
-            })
-            .await
-            .ok();
+        if let Some(database_url) = startup_database_url {
+            db_cmd_tx
+                .send(db::DbCmd::Connect { database_url })
+                .await
+                .ok();
+        }
 
         use crate::app::event::AppEvent;
 

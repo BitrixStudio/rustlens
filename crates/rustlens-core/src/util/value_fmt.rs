@@ -10,13 +10,31 @@ pub fn cell_to_string(row: &PgRow, i: usize) -> String {
             Err(_) => "<error>".into(),
         },
 
-        "INT2" | "INT4" | "INT8" => match row.try_get::<Option<i64>, _>(i) {
+        "INT2" => match row.try_get::<Option<i16>, _>(i) {
             Ok(Some(v)) => v.to_string(),
             Ok(None) => "NULL".into(),
             Err(_) => "<error>".into(),
         },
 
-        "FLOAT4" | "FLOAT8" => match row.try_get::<Option<f64>, _>(i) {
+        "INT4" => match row.try_get::<Option<i32>, _>(i) {
+            Ok(Some(v)) => v.to_string(),
+            Ok(None) => "NULL".into(),
+            Err(_) => "<error>".into(),
+        },
+
+        "INT8" => match row.try_get::<Option<i64>, _>(i) {
+            Ok(Some(v)) => v.to_string(),
+            Ok(None) => "NULL".into(),
+            Err(_) => "<error>".into(),
+        },
+
+        "FLOAT4" => match row.try_get::<Option<f32>, _>(i) {
+            Ok(Some(v)) => v.to_string(),
+            Ok(None) => "NULL".into(),
+            Err(_) => "<error>".into(),
+        },
+
+        "FLOAT8" => match row.try_get::<Option<f64>, _>(i) {
             Ok(Some(v)) => v.to_string(),
             Ok(None) => "NULL".into(),
             Err(_) => "<error>".into(),

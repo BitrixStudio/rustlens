@@ -66,7 +66,6 @@ pub fn bottom_bar(
         BottomBarMode::MiddleAndRightRightAligned => {
             spans.push(Span::styled(left.to_string(), theme.status_left));
 
-            let w = w;
             let left_len = left.chars().count();
 
             if left_len >= w {

@@ -26,6 +26,10 @@ pub async fn reduce(
 async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sender<db::DbCmd>) {
     match evt {
         db::DbEvt::Status(msg) => root.status.left = msg,
+        db::DbEvt::Connected => {
+            let schema = root.session.schema.clone();
+            let _ = db_cmd_tx.send(db::DbCmd::LoadSqlMeta { schema }).await;
+        }
 
         db::DbEvt::Error(e) => {
             // #[cfg(debug_assertions)]
@@ -56,6 +60,7 @@ async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sende
         }
 
         db::DbEvt::QueryResult {
+            request_id: _,
             columns,
             rows,
             info,
@@ -66,7 +71,10 @@ async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sende
             root.status.right = info;
         }
 
-        db::DbEvt::SqlExecuted { info } => {
+        db::DbEvt::SqlExecuted {
+            request_id: _,
+            info,
+        } => {
             root.session.sql_last_result = Some(info.clone());
             root.status.right = info;
         }
@@ -104,6 +112,7 @@ async fn handle_db(root: &mut RootState, evt: db::DbEvt, db_cmd_tx: &mpsc::Sende
 
             let _ = db_cmd_tx
                 .send(db::DbCmd::LoadTablePage {
+                    request_id: None,
                     schema,
                     table: t,
                     page: 0,
@@ -123,6 +132,15 @@ async fn handle_input(
     if root.mode == Mode::Manager {
         return handle_manager_input(root, ev, db_cmd_tx).await;
     }
+
+    if root.session.pending_sql_confirmation.is_some() {
+        return handle_pending_confirmation_input(root, ev, db_cmd_tx).await;
+    }
+
+    if matches!(ev, ConfirmPending | CancelPending) {
+        return handle_confirmation_input(root, ev, db_cmd_tx).await;
+    }
+
     let s = &mut root.session;
 
     match ev {
@@ -161,6 +179,7 @@ async fn handle_input(
                     }
                     let _ = db_cmd_tx
                         .send(db::DbCmd::LoadTablePage {
+                            request_id: None,
                             schema: s.schema.clone(),
                             table,
                             page: s.page,
@@ -178,6 +197,7 @@ async fn handle_input(
                     s.page = 0;
                     let _ = db_cmd_tx
                         .send(db::DbCmd::LoadTablePage {
+                            request_id: None,
                             schema: s.schema.clone(),
                             table,
                             page: 0,
@@ -185,16 +205,13 @@ async fn handle_input(
                         })
                         .await;
                 }
-            }
-            if s.tab == Tab::Sql && s.focus == Focus::SqlEditor {
+            } else if s.tab == Tab::Sql && s.focus == Focus::SqlEditor {
                 if s.completion_enabled && s.completion.visible {
                     crate::app::sql::complete::accept_completion(s);
-                    return false;
+                } else {
+                    s.sql_text.insert(s.sql_cursor, '\n');
+                    s.sql_cursor += 1;
                 }
-            } else {
-                // Enter in SQL editor inserts newline. Use F5/Ctrl+R to execute.
-                s.sql_text.insert(s.sql_cursor, '\n');
-                s.sql_cursor += 1;
             }
         }
 
@@ -210,6 +227,18 @@ async fn handle_input(
             if s.focus == Focus::SqlEditor {
                 s.sql_text.insert(s.sql_cursor, ch);
                 s.sql_cursor += ch.len_utf8();
+            } else if ch == 'j' {
+                match s.focus {
+                    Focus::Tables => nav_list(&mut s.tables_state, s.tables.len(), NavDir::Down),
+                    Focus::Results => nav_table(&mut s.results_state, s.rows.len(), NavDir::Down),
+                    Focus::SqlEditor => {}
+                }
+            } else if ch == 'k' {
+                match s.focus {
+                    Focus::Tables => nav_list(&mut s.tables_state, s.tables.len(), NavDir::Up),
+                    Focus::Results => nav_table(&mut s.results_state, s.rows.len(), NavDir::Up),
+                    Focus::SqlEditor => {}
+                }
             }
             if s.completion_enabled {
                 crate::app::sql::complete::refresh_completion(s);
@@ -273,8 +302,17 @@ async fn handle_input(
                 let sql = s.sql_text.trim().to_string();
                 if sql.is_empty() {
                     root.status.right = "SQL is empty.".into();
+                } else if rustlens_core::sql::safety::requires_confirmation(&sql) {
+                    s.pending_sql_confirmation = Some(sql);
+                    root.status.middle = "Confirm SQL: y/N".into();
+                    root.status.right = "Statement may modify data or schema.".into();
                 } else {
-                    let _ = db_cmd_tx.send(db::DbCmd::ExecuteSql { sql }).await;
+                    let _ = db_cmd_tx
+                        .send(db::DbCmd::ExecuteSql {
+                            request_id: None,
+                            sql,
+                        })
+                        .await;
                 }
             }
         }
@@ -314,9 +352,69 @@ async fn handle_input(
                 complete::accept_completion(s);
             }
         }
+
+        ConfirmPending | CancelPending => {}
     }
 
     false
+}
+
+async fn handle_confirmation_input(
+    root: &mut RootState,
+    ev: UiEvent,
+    db_cmd_tx: &mpsc::Sender<db::DbCmd>,
+) -> bool {
+    match ev {
+        UiEvent::ConfirmPending => {
+            if let Some(sql) = root.session.pending_sql_confirmation.take() {
+                root.status.middle.clear();
+                root.status.right = "Executing confirmed SQL.".into();
+                let _ = db_cmd_tx
+                    .send(db::DbCmd::ExecuteSql {
+                        request_id: None,
+                        sql,
+                    })
+                    .await;
+            } else if root.session.focus == Focus::SqlEditor {
+                root.session.sql_text.insert(root.session.sql_cursor, 'y');
+                root.session.sql_cursor += 1;
+                refresh_completion_for_session(&mut root.session);
+            }
+        }
+        UiEvent::CancelPending if root.session.pending_sql_confirmation.take().is_some() => {
+            root.status.middle.clear();
+            root.status.right = "SQL execution cancelled.".into();
+        }
+        UiEvent::CancelPending => {}
+        _ => {}
+    }
+
+    false
+}
+
+async fn handle_pending_confirmation_input(
+    root: &mut RootState,
+    ev: UiEvent,
+    db_cmd_tx: &mpsc::Sender<db::DbCmd>,
+) -> bool {
+    match ev {
+        UiEvent::Quit => true,
+        UiEvent::ConfirmPending | UiEvent::SqlInput('y') | UiEvent::SqlInput('Y') => {
+            handle_confirmation_input(root, UiEvent::ConfirmPending, db_cmd_tx).await
+        }
+        UiEvent::CancelPending | UiEvent::SqlInput('n') | UiEvent::SqlInput('N') => {
+            handle_confirmation_input(root, UiEvent::CancelPending, db_cmd_tx).await
+        }
+        _ => false,
+    }
+}
+
+fn refresh_completion_for_session(s: &mut crate::app::state::SessionState) {
+    if s.completion_enabled {
+        crate::app::sql::complete::refresh_completion(s);
+    } else {
+        s.completion.visible = false;
+    }
 }
 
 fn toggle_focus(s: &mut crate::app::state::SessionState) {
@@ -383,17 +481,12 @@ async fn handle_manager_input(
         OpenSelection => {
             if let Some(p) = root.manager.selected().cloned() {
                 root.session.schema = p.schema.clone();
+                root.session.page_size = p.page_size;
                 root.status.left = format!("Connecting to {}", p.name);
 
                 let _ = db_cmd_tx
                     .send(db::DbCmd::Connect {
                         database_url: p.database_url,
-                    })
-                    .await;
-
-                let _ = db_cmd_tx
-                    .send(db::DbCmd::LoadSqlMeta {
-                        schema: root.session.schema.clone(),
                     })
                     .await;
 
@@ -407,7 +500,8 @@ async fn handle_manager_input(
 
         SwitchTabBrowse | SwitchTabSql | ToggleFocus | Page(_) | ExecuteSql | SqlInput(_)
         | SqlBackspace | SqlNewline | SqlMoveCursorLeft | SqlMoveCursorRight | ToggleCompletion
-        | CompletionNext | CompletionPrev | AcceptCompletion | Refresh => {
+        | CompletionNext | CompletionPrev | AcceptCompletion | Refresh | ConfirmPending
+        | CancelPending => {
             // ignore in manager for now
         }
     }

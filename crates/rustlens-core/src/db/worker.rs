@@ -25,6 +25,7 @@ pub async fn run(mut cmd_rx: mpsc::Receiver<DbCmd>, evt_tx: mpsc::Sender<DbEvt>)
                     Ok(Ok(p)) => {
                         pool = Some(p);
                         let _ = evt_tx.send(DbEvt::Status("Connected.".into())).await;
+                        let _ = evt_tx.send(DbEvt::Connected).await;
                     }
                     Ok(Err(e)) => {
                         pool = None;
@@ -46,8 +47,14 @@ pub async fn run(mut cmd_rx: mpsc::Receiver<DbCmd>, evt_tx: mpsc::Sender<DbEvt>)
                     let _ = evt_tx.send(DbEvt::Error("Not connected.".into())).await;
                     continue;
                 };
-                let tables = crate::db::postgres::load_tables(pool, &schema).await?;
-                let _ = evt_tx.send(DbEvt::TablesLoaded { tables }).await;
+                match crate::db::postgres::load_tables(pool, &schema).await {
+                    Ok(tables) => {
+                        let _ = evt_tx.send(DbEvt::TablesLoaded { tables }).await;
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(DbEvt::Error(e.to_string())).await;
+                    }
+                }
             }
 
             DbCmd::LoadSqlMeta { schema } => {
@@ -56,13 +63,11 @@ pub async fn run(mut cmd_rx: mpsc::Receiver<DbCmd>, evt_tx: mpsc::Sender<DbEvt>)
                     continue;
                 };
 
-                // If you implemented LoadSqlMeta event, call those.
-                // Otherwise just load tables for now.
-                let tables = crate::db::postgres::load_tables(pool, &schema).await?;
-                let _ = evt_tx.send(DbEvt::TablesLoaded { tables }).await;
+                load_sql_meta(pool, schema, &evt_tx).await;
             }
 
             DbCmd::LoadTablePage {
+                request_id,
                 schema,
                 table,
                 page,
@@ -73,37 +78,88 @@ pub async fn run(mut cmd_rx: mpsc::Receiver<DbCmd>, evt_tx: mpsc::Sender<DbEvt>)
                     continue;
                 };
 
-                let (columns, rows) =
-                    crate::db::postgres::load_table_page(pool, &schema, &table, page, page_size)
-                        .await?;
-
-                let _ = evt_tx
-                    .send(DbEvt::QueryResult {
-                        columns,
-                        rows,
-                        info: format!("Loaded page {}", page + 1),
-                    })
-                    .await;
+                match crate::db::postgres::load_table_page(pool, &schema, &table, page, page_size)
+                    .await
+                {
+                    Ok((columns, rows)) => {
+                        let _ = evt_tx
+                            .send(DbEvt::QueryResult {
+                                request_id,
+                                columns,
+                                rows,
+                                info: format!("Loaded page {}", page + 1),
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(DbEvt::Error(e.to_string())).await;
+                    }
+                }
             }
 
-            DbCmd::ExecuteSql { sql } => {
+            DbCmd::ExecuteSql { request_id, sql } => {
                 let Some(pool) = pool.as_ref() else {
                     let _ = evt_tx.send(DbEvt::Error("Not connected.".into())).await;
                     continue;
                 };
 
-                match crate::db::postgres::execute_sql(pool, &sql).await? {
-                    crate::db::postgres::SqlExecResult::Rows { columns, rows } => {
+                match crate::db::postgres::execute_sql(pool, &sql).await {
+                    Ok(crate::db::postgres::SqlExecResult::Rows { columns, rows }) => {
                         let _ = evt_tx
                             .send(DbEvt::QueryResult {
+                                request_id,
                                 columns,
                                 rows,
                                 info: "Query OK".into(),
                             })
                             .await;
                     }
-                    crate::db::postgres::SqlExecResult::Command { info } => {
-                        let _ = evt_tx.send(DbEvt::SqlExecuted { info }).await;
+                    Ok(crate::db::postgres::SqlExecResult::Command { info }) => {
+                        let _ = evt_tx.send(DbEvt::SqlExecuted { request_id, info }).await;
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(DbEvt::Error(e.to_string())).await;
+                    }
+                }
+            }
+
+            DbCmd::ExecuteSqlBatch {
+                request_id,
+                statements,
+                refresh_schema,
+            } => {
+                let Some(pool) = pool.as_ref() else {
+                    let _ = evt_tx.send(DbEvt::Error("Not connected.".into())).await;
+                    continue;
+                };
+
+                if statements.is_empty() {
+                    let _ = evt_tx
+                        .send(DbEvt::SqlExecuted {
+                            request_id,
+                            info: "No SQL statements to execute.".into(),
+                        })
+                        .await;
+                    continue;
+                }
+
+                match crate::db::postgres::execute_sql_batch(pool, &statements).await {
+                    Ok(rows_affected) => {
+                        let statement_count = statements.len();
+                        let _ = evt_tx
+                            .send(DbEvt::SqlExecuted {
+                                request_id,
+                                info: format!(
+                                    "Batch OK. {statement_count} statement(s) executed. {rows_affected} rows affected."
+                                ),
+                            })
+                            .await;
+                        if let Some(schema) = refresh_schema {
+                            load_sql_meta(pool, schema, &evt_tx).await;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = evt_tx.send(DbEvt::Error(e.to_string())).await;
                     }
                 }
             }
@@ -111,4 +167,26 @@ pub async fn run(mut cmd_rx: mpsc::Receiver<DbCmd>, evt_tx: mpsc::Sender<DbEvt>)
     }
 
     Ok(())
+}
+
+async fn load_sql_meta(pool: &PgPool, schema: String, evt_tx: &mpsc::Sender<DbEvt>) {
+    match crate::db::postgres::load_tables(pool, &schema).await {
+        Ok(tables) => match crate::db::postgres::load_columns(pool, &schema).await {
+            Ok(columns) => {
+                let _ = evt_tx
+                    .send(DbEvt::SqlMetaLoaded {
+                        schema,
+                        tables,
+                        columns,
+                    })
+                    .await;
+            }
+            Err(e) => {
+                let _ = evt_tx.send(DbEvt::Error(e.to_string())).await;
+            }
+        },
+        Err(e) => {
+            let _ = evt_tx.send(DbEvt::Error(e.to_string())).await;
+        }
+    }
 }

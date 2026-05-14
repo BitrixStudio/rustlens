@@ -1,0 +1,13 @@
+[package]
+name = "rustlens-gui-bin"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[[bin]]
+name = "rustlens-gui"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+rustlens-gui = { path = "../../crates/rustlens-gui" }

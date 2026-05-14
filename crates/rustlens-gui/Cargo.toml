@@ -1,0 +1,18 @@
+[package]
+name = "rustlens-gui"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+directories = "5"
+eframe = { version = "0.28", default-features = true }
+egui = "0.28"
+egui_extras = "0.28"
+rustlens-core = { path = "../rustlens-core" }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.37", features = ["rt-multi-thread", "macros", "sync", "time"] }
+toml = "0.8"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+urlencoding = "2.1"

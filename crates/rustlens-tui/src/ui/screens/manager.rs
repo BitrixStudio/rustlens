@@ -30,11 +30,11 @@ pub fn draw(f: &mut Frame, root: &mut RootState, area: Rect, theme: &Theme) {
 
     let details = if let Some(p) = root.manager.selected() {
         format!(
-            "Name: {}\nSchema: {}\n\nURL:\n{}\n\nEnter: open\nq: quit",
-            p.name, p.schema, p.database_url
+            "Name: {}\nSchema: {}\nPage size: {}\n\nURL:\n{}\n\nEnter: open\nq: quit",
+            p.name, p.schema, p.page_size, p.database_url
         )
     } else {
-        "No profiles.\n\nEnter: open\nq: quit".into()
+        "No profiles.\n\nCreate ~/.config/rustlens/profiles.toml or the platform equivalent.\n\nq: quit".into()
     };
 
     let right = Paragraph::new(details)
