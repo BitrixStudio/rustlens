@@ -1,0 +1,91 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            ext: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            ext: tar.gz
+
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            ext: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            ext: tar.gz
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build (release)
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          OUTDIR="dist"
+          mkdir -p "$OUTDIR"
+          PKG="rustlens-${VERSION}-${{ matrix.target }}"
+          mkdir -p "$PKG"
+
+          cp "target/${{ matrix.target }}/release/rustlens" "$PKG/"
+          cp "target/${{ matrix.target }}/release/rustlensmanager" "$PKG/"
+
+          tar -czf "${OUTDIR}/${PKG}.tar.gz" "$PKG"
+          shasum -a 256 "${OUTDIR}/${PKG}.tar.gz" | awk '{print $1 "  " $2}' >> "${OUTDIR}/SHA256SUMS.txt"
+
+      - name: Package (windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $Version = "${env:GITHUB_REF_NAME}"
+          $OutDir = "dist"
+          New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
+          $Pkg = "rustlens-$Version-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path $Pkg | Out-Null
+
+          Copy-Item "target\${{ matrix.target }}\release\rustlens.exe" "$Pkg\rustlens.exe"
+          Copy-Item "target\${{ matrix.target }}\release\rustlensmanager.exe" "$Pkg\rustlensmanager.exe"
+
+          Compress-Archive -Path "$Pkg\*" -DestinationPath "$OutDir\$Pkg.zip" -Force
+
+          $Hash = (Get-FileHash "$OutDir\$Pkg.zip" -Algorithm SHA256).Hash.ToLower()
+          Add-Content -Path "$OutDir\SHA256SUMS.txt" -Value "$Hash  $Pkg.zip"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
